@@ -4,7 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-eframe = "0.24" # The simplest way to run an egui app
-egui_code_editor = "0.2" # Text editor widget with highlighting
-rfd = "0.12" # Native file dialogs (Open/Save)
-regex = "1.10" # For extracting ports to generate UUT
+# Upgrade eframe to stay in sync with the editor crate
+eframe = "0.30" 
+egui_code_editor = "0.2"
+rfd = "0.12"
+regex = "1.10"
+# Keep winapi as is
+winapi = { version = "0.3", features = ["winuser", "windef", "winbase"] }
