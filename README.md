@@ -1,4 +1,4 @@
-# 🌊 VeriWaveX - beta
+# VeriWaveX - beta
 **A Portable Verilog IDE for Computer Architecture Labs.**
 
 Developed by Aritrash Sarkar. Built with Rust + egui.
