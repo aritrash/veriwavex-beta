@@ -4,10 +4,21 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-# Upgrade eframe to stay in sync with the editor crate
-eframe = "0.30" 
+# We disable default features to get rid of the buggy wgpu/DirectX stack
+eframe = { version = "0.34", default-features = false, features = [
+    "accesskit",     # Accessibility support
+    "default_fonts", # Essential for text
+    "glow",          # Use OpenGL (Rock solid on Windows)
+    "wayland",       # Linux support
+    "x11",           # Linux support
+] }
 egui_code_editor = "0.2"
-rfd = "0.12"
+rfd = "0.15" # Upgraded to match modern Windows crates
 regex = "1.10"
-# Keep winapi as is
+
+# You can likely remove the winapi line now, but keep it if you have custom win32 code
 winapi = { version = "0.3", features = ["winuser", "windef", "winbase"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+egui_extras = { version = "0.34", features = ["all_loaders"] }
+image = { version = "0.25", features = ["png"] } # Required for PNG support
