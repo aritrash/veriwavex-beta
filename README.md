@@ -1,4 +1,4 @@
-# VeriWaveX - beta v1.0
+# VeriWaveX - v1.0
 > **A Modern, Portable Verilog IDE for Computer Architecture Labs.**
 
 [![Rust](https://img.shields.io/badge/built%20with-Rust-orange?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
