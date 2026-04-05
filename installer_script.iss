@@ -1,13 +1,13 @@
 [Setup]
 AppName=VeriWaveX
-AppVersion=1.0-beta
+AppVersion=1.0.1
 DefaultDirName={autopf}\VeriWaveX
 DefaultGroupName=VeriWaveX
 UninstallDisplayIcon={app}\VeriWaveX.exe
 Compression=lzma2/max
 SolidCompression=yes
 OutputDir=dist
-OutputBaseFilename=VeriWaveX_Setup
+OutputBaseFilename=VeriWaveX_v1.0.1_Setup
 SetupIconFile=assets\logo.ico
 PrivilegesRequired=lowest
 

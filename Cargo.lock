@@ -4023,8 +4023,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "veriwavex-beta"
-version = "0.1.0"
+name = "veriwavex"
+version = "1.0.1"
 dependencies = [
  "eframe",
  "egui_code_editor",
