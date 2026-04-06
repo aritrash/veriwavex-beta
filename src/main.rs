@@ -1,3 +1,12 @@
+/*
+ * VeriWaveX - Professional Verilog Simulation Suite
+ * Version: 1.1.0 (Linux/Windows Cross-Platform)
+ * * Copyright (c) 2026 Aritrash Sarkar. All Rights Reserved.
+ * Unauthorized copying of this file, via any medium is strictly prohibited.
+ * Proprietary and confidential.
+ * * Written by Aritrash Sarkar <aritrashsarkar@gmail.com>, April 2026
+ */
+
 #![windows_subsystem = "windows"]
 use eframe::egui;
 use egui_code_editor::{CodeEditor, ColorTheme, Syntax};
@@ -137,6 +146,9 @@ impl VerilogApp {
     }
 
     fn get_tool_path(&self, tool_name: &str) -> PathBuf {
+        if cfg!(target_os = "linux") {
+            return which::which(tool_name).unwrap_or_else(|_| PathBuf::from(tool_name));
+        }
         let exe_ext = if cfg!(target_os = "windows") { ".exe" } else { "" };
         let filename = format!("{}{}", tool_name, exe_ext);
         let mut root_dir = std::env::current_exe().unwrap();
@@ -183,29 +195,73 @@ impl VerilogApp {
     fn run_sim(&mut self) {
         self.save_current_file();
         let Some(proj) = self.project.as_ref() else { return };
+
+        // 1. Get tool paths (Uses your existing get_tool_path logic)
         let iverilog = self.get_tool_path("iverilog");
         let vvp = self.get_tool_path("vvp");
         let gtkwave = self.get_tool_path("gtkwave");
-        let ivl_root = iverilog.parent().unwrap().parent().unwrap().join("lib/ivl");
 
+        // 2. Prepare source file arguments
         let mut args = vec!["-o".to_string(), "sim.vvp".to_string()];
-        for f in &proj.source_files { if let Some(s) = f.to_str() { args.push(s.to_string()); } }
+        for f in &proj.source_files {
+            if let Some(s) = f.to_str() {
+                args.push(s.to_string());
+            }
+        }
 
         self.console_output += "Compiling...\n";
-        let compile = Command::new(&iverilog).env("IVL_ROOT", &ivl_root).current_dir(&proj.root).args(&args).output();
 
-        match compile {
-            Ok(out) if out.status.success() => {
-                let _ = Command::new(&vvp).current_dir(&proj.root).arg("sim.vvp").output();
-                if proj.root.join("dump.vcd").exists() {
-                    let _ = Command::new(&gtkwave).current_dir(&proj.root).arg("dump.vcd").spawn();
-                    self.console_output += "SUCCESS: Simulation Active.\n";
-                } else {
-                    self.console_output += "ERROR: VCD missing. Check hooks.\n";
+        // 3. Construct the Compiler Command
+        let mut compile_cmd = Command::new(&iverilog);
+        compile_cmd.current_dir(&proj.root).args(&args);
+
+        // --- CRITICAL CROSS-PLATFORM LOGIC ---
+        // On Windows, we need IVL_ROOT to find the modules in our 'vendor' folder.
+        // On Linux (WSL), the system 'iverilog' already knows where its libraries are.
+        if cfg!(target_os = "windows") {
+            if let Some(p1) = iverilog.parent() {
+                if let Some(p2) = p1.parent() {
+                    let ivl_root = p2.join("lib/ivl");
+                    compile_cmd.env("IVL_ROOT", &ivl_root);
                 }
             }
-            Ok(out) => self.console_output = format!("SYNTAX ERROR:\n{}", String::from_utf8_lossy(&out.stderr)),
-            Err(e) => self.console_output = format!("SYSTEM ERROR: {}\n", e),
+        }
+
+        let compile = compile_cmd.output();
+
+        // 4. Handle Execution Result
+        match compile {
+            Ok(out) if out.status.success() => {
+                // Run the VVP Simulation
+                let _ = Command::new(&vvp)
+                    .current_dir(&proj.root)
+                    .arg("sim.vvp")
+                    .output();
+
+                // Verify VCD output and launch GTKWave
+                if proj.root.join("dump.vcd").exists() {
+                    let _ = Command::new(&gtkwave)
+                        .current_dir(&proj.root)
+                        .arg("dump.vcd")
+                        .spawn();
+
+                    self.console_output += "SUCCESS: Simulation Active.\n";
+                } else {
+                    self.console_output += "ERROR: Simulation finished but 'dump.vcd' is missing.\nCheck if your testbench includes $dumpfile and $dumpvars.\n";
+                }
+            }
+            Ok(out) => {
+                self.console_output = format!(
+                    "SYNTAX ERROR:\n{}",
+                    String::from_utf8_lossy(&out.stderr)
+                )
+            }
+            Err(e) => {
+                self.console_output = format!(
+                    "SYSTEM ERROR: {}\nCheck if iverilog/gtkwave are installed and in path.",
+                    e
+                )
+            }
         }
     }
 }
@@ -233,7 +289,7 @@ impl eframe::App for VerilogApp {
                 ui.centered_and_justified(|ui| {
                     ui.vertical_centered(|ui| {
                         ui.add(egui::Image::new(egui::include_image!("../assets/logo.png")).max_width(120.0));
-                        ui.heading(egui::RichText::new("VeriWaveX v1.0.1").size(32.0).strong());
+                        ui.heading(egui::RichText::new("VeriWaveX v1.1.0").size(32.0).strong());
                         ui.add_space(40.0);
                         if ui.add(egui::Button::new("➕ Create New Project").min_size(egui::vec2(280.0, 45.0))).clicked() {
                             self.state = AppState::ProjectWizard;
@@ -405,7 +461,7 @@ fn main() -> eframe::Result<()> {
         ..Default::default()
     };
 
-    eframe::run_native("VeriWaveX v1.0.1", options, Box::new(|cc| {
+    eframe::run_native("VeriWaveX v1.1.0", options, Box::new(|cc| {
         egui_extras::install_image_loaders(&cc.egui_ctx);
         Ok(Box::new(VerilogApp::default()))
     }))

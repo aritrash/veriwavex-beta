@@ -1,10 +1,12 @@
 [package]
 name = "veriwavex"
-version = "1.0.1"
+version = "1.1.0"
 edition = "2024"
 authors = ["Aritrash Sarkar"]
+license-file = "LICENSE"
 
 [dependencies]
+which = "6.0"
 # We disable default features to get rid of the buggy wgpu/DirectX stack
 eframe = { version = "0.34", default-features = false, features = [
     "accesskit",     # Accessibility support
