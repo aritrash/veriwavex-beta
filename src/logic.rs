@@ -38,29 +38,42 @@ pub fn add_to_recent(settings: &mut UserSettings, path: PathBuf) {
 // --- 2. TOOLCHAIN & PATH DETECTION ---
 
 pub fn get_tool_path(tool_name: &str) -> PathBuf {
-    if cfg!(target_os = "linux") {
-        return which::which(tool_name).unwrap_or_else(|_| PathBuf::from(tool_name));
-    }
-
-    let exe_ext = ".exe";
-    let filename = format!("{}{}", tool_name, exe_ext);
-    
     let mut root_dir = std::env::current_exe().unwrap();
-    root_dir.pop(); 
+    root_dir.pop(); // Remove binary name
+
     if root_dir.ends_with("debug") || root_dir.ends_with("release") {
-        root_dir.pop(); root_dir.pop(); 
+        root_dir.pop(); // Remove 'debug'
+        root_dir.pop(); // Remove 'target'
     }
 
-    let subfolder = match tool_name {
-        "iverilog" | "vvp" => "vendor/iverilog/bin",
-        "gtkwave"          => "vendor/iverilog/gtkwave/bin", 
-        "yosys"            => "vendor/yosys/bin",
-        "dot"              => "vendor/graphviz/bin",
-        _                  => "",
+    let subfolder = if cfg!(target_os = "linux") {
+        match tool_name {
+            "yosys"            => "vendor/yosys/bin",
+            "iverilog" | "vvp" => "vendor/iverilog/bin",
+            "dot"              => "vendor/graphviz/bin",
+            _                  => "vendor/yosys/bin",
+        }
+    } else {
+        match tool_name {
+            "iverilog" | "vvp" => "vendor/iverilog/bin",
+            "yosys"            => "vendor/yosys/bin",
+            "dot"              => "vendor/graphviz/bin",
+            _                  => "",
+        }
     };
 
-    let full_path = root_dir.join(subfolder).join(&filename);
-    full_path.canonicalize().unwrap_or(full_path)
+    let filename = if cfg!(target_os = "linux") {
+        tool_name.to_string()
+    } else {
+        format!("{}.exe", tool_name)
+    };
+
+    let full_path = root_dir.join(subfolder).join(filename);
+    
+    // --- THE TRACER ---
+    println!("🔍 DEBUG: Looking for {} at: {:?}", tool_name, full_path);
+    
+    full_path
 }
 
 // --- 3. VERILOG SYNTAX DEFINITION ---
@@ -130,61 +143,80 @@ pub fn generate_schematic(verilog_file: &PathBuf) -> Result<PathBuf, String> {
     let yosys_exe = get_tool_path("yosys");
     let dot_exe = get_tool_path("dot");
     
-    let dot_file = verilog_file.with_extension("dot");
-    let png_file = verilog_file.with_extension("png");
+    // Get the directory containing the verilog file (the project root)
+    let proj_root = verilog_file.parent().unwrap_or(std::path::Path::new("."));
+    let file_name = verilog_file.file_name().unwrap().to_string_lossy();
+    let file_stem = verilog_file.file_stem().unwrap().to_string_lossy();
+    
+    let dot_file = proj_root.join(format!("{}.dot", file_stem));
+    let png_file = proj_root.join(format!("{}.png", file_stem));
 
-    // 1. Setup Yosys Command
     let mut yosys_cmd = Command::new(&yosys_exe);
     
-    if cfg!(target_os = "windows") {
-        if let Some(bin_dir) = yosys_exe.parent() {
-            // A. Help Yosys find yosys-abc.exe
-            yosys_cmd.env("PATH", bin_dir); 
-            
-            // B. Help Yosys find its techlibs (the share folder)
-            // We assume share is at ../share relative to bin/yosys.exe
-            if let Some(yosys_root) = bin_dir.parent() {
-                let share_path = yosys_root.join("share/yosys");
-                yosys_cmd.env("YOSYS_DATADIR", share_path);
-            }
+    // 1. SET THE ENVIRONMENT
+    if let Some(bin_dir) = yosys_exe.parent() {
+        // Prepend Yosys bin to PATH so it finds yosys-abc.exe and its DLLs
+        let current_path = std::env::var_os("PATH").unwrap_or_default();
+        let mut new_path = bin_dir.to_path_buf().into_os_string();
+        new_path.push(";");
+        new_path.push(current_path);
+        yosys_cmd.env("PATH", new_path);
+
+        // Tell Yosys where the 'share' folder is
+        if let Some(yosys_home) = bin_dir.parent() {
+            yosys_cmd.env("YOSYS_DATADIR", yosys_home.join("share/yosys"));
         }
     }
 
-    // Use a slightly more verbose script to catch errors early
+    // 2. RUN FROM PROJECT ROOT
+    yosys_cmd.current_dir(proj_root);
+
+    // Use relative filename and prefix to avoid Windows path escaping issues
     let yosys_script = format!(
-        "read_verilog {:?}; hierarchy -check; proc; opt; write_graphviz {:?}",
-        verilog_file, dot_file
+        "read_verilog {}; hierarchy -check; proc; opt; show -format dot -prefix {}",
+        file_name, file_stem
     );
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        yosys_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
 
     let yosys_output = yosys_cmd.arg("-p").arg(yosys_script).output();
 
     match yosys_output {
         Ok(out) if out.status.success() => {
-            // 2. Run Graphviz DOT
+            // --- GRAPHVIZ PHASE ---
             let mut dot_cmd = Command::new(&dot_exe);
+            
             if let Some(bin_dir) = dot_exe.parent() {
-                dot_cmd.env("PATH", bin_dir);
+                let current_path = std::env::var_os("PATH").unwrap_or_default();
+                let mut new_path = bin_dir.to_path_buf().into_os_string();
+                new_path.push(";");
+                new_path.push(current_path);
+                dot_cmd.env("PATH", new_path);
             }
 
-            let dot_status = dot_cmd
-                .args(["-Tpng", dot_file.to_str().unwrap(), "-o", png_file.to_str().unwrap()])
+            dot_cmd.current_dir(proj_root);
+            
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                dot_cmd.creation_flags(0x08000000);
+            }
+
+            let dot_output = dot_cmd
+                .args(["-Tpng", &format!("{}.dot", file_stem), "-o", &format!("{}.png", file_stem)])
                 .output();
 
-            if let Ok(out) = dot_status {
+            if let Ok(out) = dot_output {
                 if out.status.success() { return Ok(png_file); }
                 return Err(format!("Graphviz Error: {}", String::from_utf8_lossy(&out.stderr)));
             }
             Err("Graphviz failed to generate image.".into())
         }
-        Ok(out) => {
-            let stderr = String::from_utf8_lossy(&out.stderr);
-            let stdout = String::from_utf8_lossy(&out.stdout);
-            // If it's still empty, it's a library/path issue
-            if stderr.is_empty() && stdout.is_empty() {
-                return Err("Yosys crashed silently. Check if 'vendor/yosys/share' folder exists.".into());
-            }
-            Err(format!("YOSYS ERROR:\n{}\n{}", stdout, stderr))
-        }
+        Ok(out) => Err(format!("YOSYS ERROR:\n{}", String::from_utf8_lossy(&out.stdout))),
         Err(e) => Err(format!("Failed to start Yosys: {}", e)),
     }
 }

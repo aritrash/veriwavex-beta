@@ -2,6 +2,7 @@
 use eframe::egui;
 use crate::app::VerilogApp;
 use crate::logic;
+use std::fs;
 
 pub fn draw_schematic_window(app: &mut VerilogApp, ctx: &egui::Context) {
     let mut is_open = app.show_schematic;
@@ -33,12 +34,21 @@ pub fn draw_schematic_window(app: &mut VerilogApp, ctx: &egui::Context) {
                 if let Some(file) = &app.active_file {
                     let png_path = file.with_extension("png");
                     if png_path.exists() {
-                        // Use the image loaders you installed in main.rs
-                        let uri = format!("file://{}", png_path.to_string_lossy());
+                        // 1. Get the absolute path string
+                        let mut path_str = png_path.to_string_lossy().to_string();
+                        
+                        // 2. STRIP THE UNC PREFIX: Remove the "\\?\" that canonicalize/Windows adds
+                        if path_str.starts_with(r"\\?\") {
+                            path_str = path_str.replace(r"\\?\", "");
+                        }
+
+                        // 3. FORMAT AS URI: Use 3 slashes and standard forward slashes
+                        let uri = format!("file:///{}", path_str.replace("\\", "/"));
+                        
                         ui.add(egui::Image::new(uri).shrink_to_fit());
                     } else {
                         ui.centered_and_justified(|ui| {
-                            ui.label("No schematic generated yet. Click 'Synthesize' to begin.");
+                            ui.label("No schematic found. Click 'Synthesize Logic' to generate.");
                         });
                     }
                 }

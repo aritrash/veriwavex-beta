@@ -1,3 +1,32 @@
+# --- RUST & BUILD ---
 /target
+Cargo.lock
+debug/
+release/
+
+# --- PROJECT DEPENDENCIES (BINARIES) ---
+/vendor/
+/vendor/**
+
+# --- TEMPORARY SIMULATION & SYNTHESIS OUTPUTS ---
+*.vcd
+*.dot
+*.png
+*.vvp
+*.log
+sim.vvp
+dump.vcd
+
+# --- USER SPECIFIC / SENSITIVE ---
+settings.json
+.env
+.vscode/
+.idea/
+/VeriWaveX.AppDir
+appimagetool-x86_64.AppImage
+
+# --- INSTALLER FILES ---
 *.iss
-/vendor/yosys
+*.msi
+*.exe
+VeriWaveX_v2.0.0_Linux_x86_64.AppImage
