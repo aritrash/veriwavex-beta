@@ -50,12 +50,14 @@ pub fn get_tool_path(tool_name: &str) -> PathBuf {
         match tool_name {
             "yosys"            => "vendor/yosys/bin",
             "iverilog" | "vvp" => "vendor/iverilog/bin",
+            "gtkwave" => "vendor/iverilog/gtkwave/bin",
             "dot"              => "vendor/graphviz/bin",
             _                  => "vendor/yosys/bin",
         }
     } else {
         match tool_name {
             "iverilog" | "vvp" => "vendor/iverilog/bin",
+            "gtkwave" => "vendor/iverilog/gtkwave/bin",
             "yosys"            => "vendor/yosys/bin",
             "dot"              => "vendor/graphviz/bin",
             _                  => "",
